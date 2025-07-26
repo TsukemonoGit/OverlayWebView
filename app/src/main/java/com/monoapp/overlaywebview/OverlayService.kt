@@ -23,8 +23,8 @@ class OverlayService : Service() {
 
     // Size settings (zoom level also linked)
     private val sizeOptions = listOf(
-        Triple(400, 600, 0.7f),    // Small - 0.7x zoom
-        Triple(600, 1000, 0.8f),   // Medium - 0.8x zoom
+        Triple(600, 600, 0.7f),    // Small - 0.7x zoom
+        Triple(600, 900, 0.8f),   // Medium - 0.8x zoom
         Triple(800, 1200, 0.9f)    // Large - 0.9x zoom
     )
     private val sizeLabels = listOf("S", "M", "L")
