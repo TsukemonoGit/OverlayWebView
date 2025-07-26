@@ -1,24 +1,46 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
+<androidx.coordinatorlayout.widget.CoordinatorLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    android:orientation="vertical"
-    android:padding="16dp"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:gravity="center">
-
-    <EditText
-        android:id="@+id/urlInput"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="URLを入力してください"
-        android:inputType="textUri" />
+    android:fitsSystemWindows="true"> <LinearLayout
+    android:orientation="vertical"
+    android:paddingLeft="16dp"
+    android:paddingRight="16dp"
+    android:paddingBottom="16dp"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    app:layout_behavior="@string/appbar_scrolling_view_behavior"> <EditText
+    android:id="@+id/urlInput"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:hint="新しいURLまたは検索ワードを入力"
+    android:inputType="textUri" />
 
     <Button
-        android:id="@+id/startOverlayButton"
+        android:id="@+id/addUrlButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="リストに追加"
+        android:layout_gravity="end"
+        android:layout_marginTop="8dp" />
+
+    <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="オーバーレイ表示開始"
-        android:layout_marginTop="16dp" />
+        android:text="保存済みURL:"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="8dp"/>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/urlListRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"/>
 
 </LinearLayout>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

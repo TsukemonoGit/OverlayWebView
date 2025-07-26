@@ -36,6 +36,8 @@ android {
 }
 
 dependencies {
+    // Gsonライブラリの追加
+    implementation(libs.gson)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

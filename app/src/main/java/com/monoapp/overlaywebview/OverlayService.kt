@@ -13,6 +13,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.TextView // Import TextView
+import android.widget.Toast
 
 class OverlayService : Service() {
     private lateinit var windowManager: WindowManager
@@ -25,9 +26,10 @@ class OverlayService : Service() {
     private val sizeOptions = listOf(
         Triple(600, 600, 0.7f),    // Small - 0.7x zoom
         Triple(600, 900, 0.8f),   // Medium - 0.8x zoom
-        Triple(800, 1200, 0.9f)    // Large - 0.9x zoom
+        Triple(800, 1200, 0.9f),    // Large - 0.9x zoom
+                Triple(1000, 1200, 1.0f)    // XLarge
     )
-    private val sizeLabels = listOf("S", "M", "L")
+    private val sizeLabels = listOf("S", "M", "L","XL")
     private var currentSizeIndex = 1 // Default is Medium (M)
     private var isFocusEnabled = false // Track focus state
 
@@ -223,32 +225,52 @@ class OverlayService : Service() {
 
     private fun showUrlDialog() {
         val editText = EditText(this)
-        editText.setText(webView.url ?: "")
+        editText.setText(webView.url ?: "") // 現在のWebViewのURLをデフォルト値として表示
 
-        val dialog = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog)
-            .setTitle("URL変更")
-            .setMessage("新しいURLを入力してください:")
+        val dialogBuilder = AlertDialog.Builder(this, R.style.AppAlertDialogTheme) // カスタムテーマを適用
+            .setTitle("URLまたは検索ワードを入力")
+            .setMessage("URLを直接入力するか、検索ワードを入力してください:")
             .setView(editText)
-            .setPositiveButton("OK") { _, _ ->
-                val newUrl = editText.text.toString().trim()
-                if (newUrl.isNotEmpty()) {
-                    var finalUrl = newUrl
-                    // Add protocol if not specified
-                    if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
-                        finalUrl = "https://$finalUrl"
+            .setPositiveButton("開く") { _, _ -> // ボタン名を「OK」から「開く」に変更
+                val input = editText.text.toString().trim()
+                if (input.isNotEmpty()) {
+                    var targetUrl: String
+                    val urlPattern = Regex("^(https?|ftp)://.+|www\\..+|.+\\..+$")
+
+                    if (input.matches(urlPattern)) {
+                        targetUrl = input
+                        if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
+                            targetUrl = "https://$targetUrl"
+                        }
+                    } else {
+                        targetUrl = "https://www.google.com/search?q=${android.net.Uri.encode(input)}"
                     }
 
-                    // Change URL
-                    webView.loadUrl(finalUrl)
-
-                    // Save URL
-                    sharedPreferences.edit().putString("last_url", finalUrl).apply()
+                    webView.loadUrl(targetUrl)
+                    // URLを保存。ここでは「開く」ボタンを押したら必ず保存される挙動とする
+                    sharedPreferences.edit().putString("last_url", targetUrl).apply()
                 }
             }
             .setNegativeButton("キャンセル", null)
-            .create()
 
-        // Set dialog window type
+        // 「今のURLを保存」ボタンの追加
+        dialogBuilder.setNeutralButton("今のURLを保存") { _, _ ->
+            val currentUrl = webView.url // WebViewの現在のURLを取得
+            if (currentUrl != null && currentUrl.isNotEmpty()) {
+                sharedPreferences.edit().putString("last_url", currentUrl).apply()
+                Toast.makeText(this, "現在のURLを保存しました", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "保存できるURLがありません", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+        // 「最後に開いていたページを保存」は、現在の「開く」ボタンで自動的に保存されるため、
+        // 明示的なボタンは不要かもしれません。
+        // もし「最後に開いていた」が別の意味（例：アプリ終了時のURL）であれば、別の保存キーで管理が必要です。
+        // 今回は「開く」ボタンでロードしたURLが「last_url」として保存されるので、これで対応します。
+
+
+        val dialog = dialogBuilder.create()
+
         dialog.window?.setType(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
