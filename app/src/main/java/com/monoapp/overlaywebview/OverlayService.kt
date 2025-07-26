@@ -12,6 +12,7 @@ import android.view.*
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
+import android.widget.TextView // Import TextView
 
 class OverlayService : Service() {
     private lateinit var windowManager: WindowManager
@@ -20,30 +21,31 @@ class OverlayService : Service() {
     private lateinit var webView: WebView
     private lateinit var sharedPreferences: SharedPreferences
 
-    // サイズの設定（ズーム倍率も連動）
+    // Size settings (zoom level also linked)
     private val sizeOptions = listOf(
-        Triple(400, 600, 0.7f),    // Small - 0.6x zoom
-        Triple(600, 1000, 0.8f),    // Medium - 0.8x zoom
-        Triple(800, 1200, 0.9f)    // Large - 1.0x zoom
+        Triple(400, 600, 0.7f),    // Small - 0.7x zoom
+        Triple(600, 1000, 0.8f),   // Medium - 0.8x zoom
+        Triple(800, 1200, 0.9f)    // Large - 0.9x zoom
     )
     private val sizeLabels = listOf("S", "M", "L")
-    private var currentSizeIndex = 1 // デフォルトはMedium (M)
+    private var currentSizeIndex = 1 // Default is Medium (M)
+    private var isFocusEnabled = false // Track focus state
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         sharedPreferences = getSharedPreferences("overlay_prefs", Context.MODE_PRIVATE)
 
-        // 保存されたサイズ設定を取得
-        currentSizeIndex = sharedPreferences.getInt("window_size_index", 1) // デフォルトはMedium
+        // Retrieve saved size setting
+        currentSizeIndex = sharedPreferences.getInt("window_size_index", 1) // Default is Medium
 
-        // 保存されたURLを取得、なければデフォルトを使用
+        // Retrieve saved URL, use default if none
         val url = intent?.getStringExtra("url") ?: sharedPreferences.getString("last_url", "https://example.com") ?: "https://example.com"
 
         val inflater = getSystemService(LAYOUT_INFLATER_SERVICE) as LayoutInflater
         overlayView = inflater.inflate(R.layout.overlay_layout, null)
 
-        // WindowManager.LayoutParams の設定
+        // WindowManager.LayoutParams setup
         val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
@@ -51,9 +53,11 @@ class OverlayService : Service() {
         }
 
         params = WindowManager.LayoutParams(
-            sizeOptions[currentSizeIndex].first,  // 幅
-            sizeOptions[currentSizeIndex].second, // 高さ
+            sizeOptions[currentSizeIndex].first,  // Width
+            sizeOptions[currentSizeIndex].second, // Height
             overlayType,
+            // Initial flags: Not touch modal, watch outside touch.
+            // These flags will be updated by toggleFocus()
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
             PixelFormat.TRANSLUCENT
@@ -73,19 +77,22 @@ class OverlayService : Service() {
             return START_NOT_STICKY
         }
 
-        // WebView 設定
+        // WebView settings
         setupWebView(url)
 
-        // ドラッグ機能の設定
+        // Setup drag functionality
         setupDragFunctionality()
 
-        // サイズ変更ボタンの設定
+        // Setup size change button
         setupSizeButton()
 
-        // URL変更ボタンの設定
+        // Setup URL change button
         setupUrlButton()
 
-        // 終了ボタンの設定
+        // Setup focus button
+        setupFocusButton() // Call the new setupFocusButton method
+
+        // Setup close button
         setupCloseButton()
 
         return START_STICKY
@@ -104,7 +111,7 @@ class OverlayService : Service() {
         }
         webView.webViewClient = WebViewClient()
 
-        // 初期ズーム設定（サイズ連動）
+        // Initial zoom setting (linked to size)
         applyZoom()
         webView.loadUrl(url)
     }
@@ -113,13 +120,13 @@ class OverlayService : Service() {
         val zoomLevel = sizeOptions[currentSizeIndex].third
         webView.setInitialScale((zoomLevel * 100).toInt())
         webView.settings.textZoom = (zoomLevel * 100).toInt()
-      //  webView.reload()
     }
 
     private fun setupDragFunctionality() {
         val dragBar = overlayView.findViewById<View>(R.id.dragBar)
         val sizeButton = overlayView.findViewById<View>(R.id.sizeButton)
         val urlButton = overlayView.findViewById<View>(R.id.urlButton)
+        val focusButton = overlayView.findViewById<View>(R.id.focusButton) // Get reference to focus button
         val closeButton = overlayView.findViewById<View>(R.id.closeButton)
         var initialX = 0
         var initialY = 0
@@ -127,9 +134,10 @@ class OverlayService : Service() {
         var initialTouchY = 0f
 
         dragBar.setOnTouchListener { v, event ->
-            // ボタンの領域はドラッグ対象外
+            // Exclude button areas from drag
             if (isTouchOnButton(event, sizeButton) ||
                 isTouchOnButton(event, urlButton) ||
+                isTouchOnButton(event, focusButton) || // Include focus button
                 isTouchOnButton(event, closeButton)) {
                 return@setOnTouchListener false
             }
@@ -161,7 +169,7 @@ class OverlayService : Service() {
             }
         }
 
-        // クリック可能にする
+        // Make it clickable
         dragBar.isClickable = true
     }
 
@@ -178,24 +186,24 @@ class OverlayService : Service() {
     }
 
     private fun setupSizeButton() {
-        val sizeButton = overlayView.findViewById<android.widget.TextView>(R.id.sizeButton)
+        val sizeButton = overlayView.findViewById<TextView>(R.id.sizeButton)
         sizeButton.text = sizeLabels[currentSizeIndex]
 
         sizeButton.setOnClickListener {
-            // 次のサイズに変更
+            // Change to next size
             currentSizeIndex = (currentSizeIndex + 1) % sizeOptions.size
 
-            // ウィンドウサイズを更新
+            // Update window size
             params.width = sizeOptions[currentSizeIndex].first
             params.height = sizeOptions[currentSizeIndex].second
 
-            // ボタンのテキストを更新
+            // Update button text
             sizeButton.text = sizeLabels[currentSizeIndex]
 
-            // サイズに連動してズームも変更
+            // Change zoom linked to size
             applyZoom()
 
-            // サイズ設定を保存
+            // Save size setting
             sharedPreferences.edit().putInt("window_size_index", currentSizeIndex).apply()
 
             try {
@@ -225,22 +233,22 @@ class OverlayService : Service() {
                 val newUrl = editText.text.toString().trim()
                 if (newUrl.isNotEmpty()) {
                     var finalUrl = newUrl
-                    // プロトコルが指定されていない場合はhttpsを追加
+                    // Add protocol if not specified
                     if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
                         finalUrl = "https://$finalUrl"
                     }
 
-                    // URLを変更
+                    // Change URL
                     webView.loadUrl(finalUrl)
 
-                    // URLを保存
+                    // Save URL
                     sharedPreferences.edit().putString("last_url", finalUrl).apply()
                 }
             }
             .setNegativeButton("キャンセル", null)
             .create()
 
-        // ダイアログのウィンドウタイプを設定
+        // Set dialog window type
         dialog.window?.setType(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -252,10 +260,52 @@ class OverlayService : Service() {
         dialog.show()
     }
 
+    private fun setupFocusButton() {
+        val focusButton = overlayView.findViewById<TextView>(R.id.focusButton)
+        updateFocusButtonText(focusButton) // Set initial text
+
+        focusButton.setOnClickListener {
+            toggleFocus()
+            updateFocusButtonText(focusButton) // Update text after toggling
+        }
+    }
+
+    private fun updateFocusButtonText(button: TextView) {
+        button.text = if (isFocusEnabled)  "🚫" else "⌨"// Keyboard or No-entry symbol
+        button.setBackgroundColor(if (isFocusEnabled)  0xFF9E9E9E.toInt() else 0xFF673AB7.toInt() )  // Purple if enabled, Grey if disabled
+    }
+
+    private fun toggleFocus() {
+        isFocusEnabled = !isFocusEnabled
+        if (isFocusEnabled) {
+            // When focus is enabled, allow touch events to go through to WebView
+            // FLAG_NOT_FOCUSABLE allows the overlay to not consume input focus,
+            // letting the WebView receive focus.
+            // FLAG_NOT_TOUCH_MODAL allows touches outside the window to be received
+            // by windows underneath, but we want touches inside the overlay to be handled.
+            // So we remove FLAG_NOT_TOUCH_MODAL to make the overlay "modal" to touches.
+            params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+            // Or if you want the webview to always handle touches when focused:
+            // params.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        } else {
+            // When focus is disabled, prevent WebView from receiving touches,
+            // and allow dragging.
+            params.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+        }
+        try {
+            windowManager.updateViewLayout(overlayView, params)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+
     private fun setupCloseButton() {
         val closeButton = overlayView.findViewById<View>(R.id.closeButton)
         closeButton.setOnClickListener {
-            // サービスを停止してオーバーレイを終了
+            // Stop the service and end the overlay
             stopSelf()
         }
     }
