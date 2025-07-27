@@ -12,7 +12,7 @@ import android.view.*
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
-import android.widget.TextView // Import TextView
+import android.widget.TextView
 import android.widget.Toast
 
 class OverlayService : Service() {
@@ -27,9 +27,8 @@ class OverlayService : Service() {
         Triple(600, 600, 0.7f),    // Small - 0.7x zoom
         Triple(600, 900, 0.8f),   // Medium - 0.8x zoom
         Triple(800, 1200, 0.9f),    // Large - 0.9x zoom
-                Triple(1000, 1200, 1.0f)    // XLarge
+        Triple(1000, 1400, 1.0f)    // XLarge
     )
-    private val sizeLabels = listOf("S", "M", "L","XL")
     private var currentSizeIndex = 1 // Default is Medium (M)
     private var isFocusEnabled = false // Track focus state
 
@@ -58,8 +57,6 @@ class OverlayService : Service() {
             sizeOptions[currentSizeIndex].first,  // Width
             sizeOptions[currentSizeIndex].second, // Height
             overlayType,
-            // Initial flags: Not touch modal, watch outside touch.
-            // These flags will be updated by toggleFocus()
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
             PixelFormat.TRANSLUCENT
@@ -85,14 +82,19 @@ class OverlayService : Service() {
         // Setup drag functionality
         setupDragFunctionality()
 
-        // Setup size change button
-        setupSizeButton()
+        // Setup size change buttons
+        setupSizeButtons()
 
         // Setup URL change button
         setupUrlButton()
 
+        // ★ここから追加★
+        // Setup refresh button
+        setupRefreshButton()
+        // ★ここまで追加★
+
         // Setup focus button
-        setupFocusButton() // Call the new setupFocusButton method
+        setupFocusButton()
 
         // Setup close button
         setupCloseButton()
@@ -126,9 +128,13 @@ class OverlayService : Service() {
 
     private fun setupDragFunctionality() {
         val dragBar = overlayView.findViewById<View>(R.id.dragBar)
-        val sizeButton = overlayView.findViewById<View>(R.id.sizeButton)
+        val sizeDecreaseButton = overlayView.findViewById<View>(R.id.sizeDecreaseButton)
+        val sizeIncreaseButton = overlayView.findViewById<View>(R.id.sizeIncreaseButton)
         val urlButton = overlayView.findViewById<View>(R.id.urlButton)
-        val focusButton = overlayView.findViewById<View>(R.id.focusButton) // Get reference to focus button
+        // ★ここから追加★
+        val refreshButton = overlayView.findViewById<View>(R.id.refreshButton)
+        // ★ここまで追加★
+        val focusButton = overlayView.findViewById<View>(R.id.focusButton)
         val closeButton = overlayView.findViewById<View>(R.id.closeButton)
         var initialX = 0
         var initialY = 0
@@ -137,10 +143,14 @@ class OverlayService : Service() {
 
         dragBar.setOnTouchListener { v, event ->
             // Exclude button areas from drag
-            if (isTouchOnButton(event, sizeButton) ||
+            if (isTouchOnButton(event, sizeDecreaseButton) ||
+                isTouchOnButton(event, sizeIncreaseButton) ||
                 isTouchOnButton(event, urlButton) ||
-                isTouchOnButton(event, focusButton) || // Include focus button
-                isTouchOnButton(event, closeButton)) {
+                isTouchOnButton(event, focusButton) ||
+                isTouchOnButton(event, closeButton) ||
+                // ★ここから追加★
+                isTouchOnButton(event, refreshButton)) {
+                // ★ここまで追加★
                 return@setOnTouchListener false
             }
 
@@ -187,32 +197,69 @@ class OverlayService : Service() {
                 event.rawY >= buttonTop && event.rawY <= buttonBottom
     }
 
-    private fun setupSizeButton() {
-        val sizeButton = overlayView.findViewById<TextView>(R.id.sizeButton)
-        sizeButton.text = sizeLabels[currentSizeIndex]
+    private fun setupSizeButtons() {
+        val sizeDecreaseButton = overlayView.findViewById<TextView>(R.id.sizeDecreaseButton)
+        val sizeIncreaseButton = overlayView.findViewById<TextView>(R.id.sizeIncreaseButton)
 
-        sizeButton.setOnClickListener {
-            // Change to next size
-            currentSizeIndex = (currentSizeIndex + 1) % sizeOptions.size
+        // Initial button state
+        updateSizeButtonStates(sizeDecreaseButton, sizeIncreaseButton)
 
-            // Update window size
-            params.width = sizeOptions[currentSizeIndex].first
-            params.height = sizeOptions[currentSizeIndex].second
-
-            // Update button text
-            sizeButton.text = sizeLabels[currentSizeIndex]
-
-            // Change zoom linked to size
-            applyZoom()
-
-            // Save size setting
-            sharedPreferences.edit().putInt("window_size_index", currentSizeIndex).apply()
-
-            try {
-                windowManager.updateViewLayout(overlayView, params)
-            } catch (e: Exception) {
-                e.printStackTrace()
+        sizeDecreaseButton.setOnClickListener {
+            if (currentSizeIndex > 0) {
+                currentSizeIndex--
+                updateWindowSize()
+                updateSizeButtonStates(sizeDecreaseButton, sizeIncreaseButton)
             }
+        }
+
+        sizeIncreaseButton.setOnClickListener {
+            if (currentSizeIndex < sizeOptions.size - 1) {
+                currentSizeIndex++
+                updateWindowSize()
+                updateSizeButtonStates(sizeDecreaseButton, sizeIncreaseButton)
+            }
+        }
+    }
+
+    private fun updateSizeButtonStates(decreaseButton: TextView, increaseButton: TextView) {
+        // Update decrease button state
+        if (currentSizeIndex <= 0) {
+            decreaseButton.isEnabled = false
+            decreaseButton.setBackgroundColor(0xFF9E9E9E.toInt()) // Grey for disabled
+            decreaseButton.alpha = 0.5f
+        } else {
+            decreaseButton.isEnabled = true
+            decreaseButton.setBackgroundColor(0xFF4CAF50.toInt()) // Green for enabled
+            decreaseButton.alpha = 1.0f
+        }
+
+        // Update increase button state
+        if (currentSizeIndex >= sizeOptions.size - 1) {
+            increaseButton.isEnabled = false
+            increaseButton.setBackgroundColor(0xFF9E9E9E.toInt()) // Grey for disabled
+            increaseButton.alpha = 0.5f
+        } else {
+            increaseButton.isEnabled = true
+            increaseButton.setBackgroundColor(0xFF4CAF50.toInt()) // Green for enabled
+            increaseButton.alpha = 1.0f
+        }
+    }
+
+    private fun updateWindowSize() {
+        // Update window size
+        params.width = sizeOptions[currentSizeIndex].first
+        params.height = sizeOptions[currentSizeIndex].second
+
+        // Change zoom linked to size
+        applyZoom()
+
+        // Save size setting
+        sharedPreferences.edit().putInt("window_size_index", currentSizeIndex).apply()
+
+        try {
+            windowManager.updateViewLayout(overlayView, params)
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -225,13 +272,13 @@ class OverlayService : Service() {
 
     private fun showUrlDialog() {
         val editText = EditText(this)
-        editText.setText(webView.url ?: "") // 現在のWebViewのURLをデフォルト値として表示
+        editText.setText(webView.url ?: "")
 
-        val dialogBuilder = AlertDialog.Builder(this, R.style.AppAlertDialogTheme) // カスタムテーマを適用
+        val dialogBuilder = AlertDialog.Builder(this, R.style.AppAlertDialogTheme)
             .setTitle("URLまたは検索ワードを入力")
             .setMessage("URLを直接入力するか、検索ワードを入力してください:")
             .setView(editText)
-            .setPositiveButton("開く") { _, _ -> // ボタン名を「OK」から「開く」に変更
+            .setPositiveButton("開く") { _, _ ->
                 val input = editText.text.toString().trim()
                 if (input.isNotEmpty()) {
                     var targetUrl: String
@@ -247,15 +294,13 @@ class OverlayService : Service() {
                     }
 
                     webView.loadUrl(targetUrl)
-                    // URLを保存。ここでは「開く」ボタンを押したら必ず保存される挙動とする
                     sharedPreferences.edit().putString("last_url", targetUrl).apply()
                 }
             }
             .setNegativeButton("キャンセル", null)
 
-        // 「今のURLを保存」ボタンの追加
         dialogBuilder.setNeutralButton("今のURLを保存") { _, _ ->
-            val currentUrl = webView.url // WebViewの現在のURLを取得
+            val currentUrl = webView.url
             if (currentUrl != null && currentUrl.isNotEmpty()) {
                 sharedPreferences.edit().putString("last_url", currentUrl).apply()
                 Toast.makeText(this, "現在のURLを保存しました", Toast.LENGTH_SHORT).show()
@@ -263,11 +308,6 @@ class OverlayService : Service() {
                 Toast.makeText(this, "保存できるURLがありません", android.widget.Toast.LENGTH_SHORT).show()
             }
         }
-        // 「最後に開いていたページを保存」は、現在の「開く」ボタンで自動的に保存されるため、
-        // 明示的なボタンは不要かもしれません。
-        // もし「最後に開いていた」が別の意味（例：アプリ終了時のURL）であれば、別の保存キーで管理が必要です。
-        // 今回は「開く」ボタンでロードしたURLが「last_url」として保存されるので、これで対応します。
-
 
         val dialog = dialogBuilder.create()
 
@@ -282,37 +322,37 @@ class OverlayService : Service() {
         dialog.show()
     }
 
+    // ★ここから追加★
+    private fun setupRefreshButton() {
+        val refreshButton = overlayView.findViewById<View>(R.id.refreshButton)
+        refreshButton.setOnClickListener {
+            webView.reload() // WebViewをリロードする
+            Toast.makeText(this, "ページを更新しました", Toast.LENGTH_SHORT).show()
+        }
+    }
+    // ★ここまで追加★
+
     private fun setupFocusButton() {
         val focusButton = overlayView.findViewById<TextView>(R.id.focusButton)
-        updateFocusButtonText(focusButton) // Set initial text
+        updateFocusButtonText(focusButton)
 
         focusButton.setOnClickListener {
             toggleFocus()
-            updateFocusButtonText(focusButton) // Update text after toggling
+            updateFocusButtonText(focusButton)
         }
     }
 
     private fun updateFocusButtonText(button: TextView) {
-        button.text = if (isFocusEnabled)  "🚫" else "⌨"// Keyboard or No-entry symbol
-        button.setBackgroundColor(if (isFocusEnabled)  0xFF9E9E9E.toInt() else 0xFF673AB7.toInt() )  // Purple if enabled, Grey if disabled
+        button.text = if (isFocusEnabled)  "🚫" else "⌨"
+        button.setBackgroundColor(if (isFocusEnabled)  0xFF9E9E9E.toInt() else 0xFF673AB7.toInt())
     }
 
     private fun toggleFocus() {
         isFocusEnabled = !isFocusEnabled
         if (isFocusEnabled) {
-            // When focus is enabled, allow touch events to go through to WebView
-            // FLAG_NOT_FOCUSABLE allows the overlay to not consume input focus,
-            // letting the WebView receive focus.
-            // FLAG_NOT_TOUCH_MODAL allows touches outside the window to be received
-            // by windows underneath, but we want touches inside the overlay to be handled.
-            // So we remove FLAG_NOT_TOUCH_MODAL to make the overlay "modal" to touches.
             params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-            // Or if you want the webview to always handle touches when focused:
-            // params.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
         } else {
-            // When focus is disabled, prevent WebView from receiving touches,
-            // and allow dragging.
             params.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
         }
@@ -323,11 +363,9 @@ class OverlayService : Service() {
         }
     }
 
-
     private fun setupCloseButton() {
         val closeButton = overlayView.findViewById<View>(R.id.closeButton)
         closeButton.setOnClickListener {
-            // Stop the service and end the overlay
             stopSelf()
         }
     }

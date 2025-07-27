@@ -19,24 +19,46 @@
         android:paddingRight="8dp">
 
         <TextView
+            android:id="@+id/focusButton"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginRight="4dp"
+            android:background="#673AB7"
+            android:text="⌨"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <Space
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="≡"
+            android:layout_weight="1" />
+        <TextView
+            android:id="@+id/sizeDecreaseButton"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginRight="2dp"
+            android:background="#4CAF50"
+            android:text="-"
             android:textColor="#FFFFFF"
-            android:textSize="16sp"
+            android:textSize="18sp"
             android:textStyle="bold"
-            android:gravity="center" />
+            android:gravity="center"
+            android:clickable="true"
+            android:focusable="true" />
 
         <TextView
-            android:id="@+id/sizeButton"
+            android:id="@+id/sizeIncreaseButton"
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:layout_marginRight="4dp"
             android:background="#4CAF50"
-            android:text="S"
+            android:text="+"
             android:textColor="#FFFFFF"
-            android:textSize="14sp"
+            android:textSize="18sp"
             android:textStyle="bold"
             android:gravity="center"
             android:clickable="true"
@@ -57,11 +79,13 @@
             android:focusable="true" />
 
         <TextView
-            android:id="@+id/focusButton"
+            android:id="@+id/refreshButton"
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:layout_marginRight="4dp"
-            android:background="#673AB7" android:text="⌨" android:textColor="#FFFFFF"
+            android:background="#2196F3"
+            android:text="↻"
+            android:textColor="#FFFFFF"
             android:textSize="18sp"
             android:textStyle="bold"
             android:gravity="center"
