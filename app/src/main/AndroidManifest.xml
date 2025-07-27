@@ -23,7 +23,9 @@
         </activity>
         <service android:name=".OverlayService"
             android:enabled="true"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"/>
     </application>
 
 </manifest>

@@ -5,6 +5,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PixelFormat
@@ -19,8 +20,7 @@ import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import android.util.DisplayMetrics
-import kotlin.io.path.Path
-import kotlin.io.path.moveTo
+import android.content.res.Configuration 
 
 class OverlayService : Service() {
     private lateinit var windowManager: WindowManager
@@ -474,6 +474,41 @@ class OverlayService : Service() {
         closeButton.setOnClickListener {
             stopSelf()
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+
+        // 画面の向きが変わったときに画面サイズを再取得
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) { // API 30 (Android 11) 以降
+            val windowMetrics = windowManager.currentWindowMetrics
+            val bounds = windowMetrics.bounds
+            maxScreenWidth = bounds.width()
+            maxScreenHeight = bounds.height()
+        } else { // API 29 (Android 10) 以前
+            val displayMetrics = DisplayMetrics()
+            windowManager.defaultDisplay.getMetrics(displayMetrics)
+            maxScreenWidth = displayMetrics.widthPixels
+            maxScreenHeight = displayMetrics.heightPixels
+        }
+
+        // ウィンドウの位置とサイズを調整（任意）
+        // 画面サイズが変わった際に、既存のウィンドウが画面外にはみ出さないように、
+        // あるいは新しい画面サイズに合わせて中央に再配置するなどのロジックを追加できます。
+        // 例: はみ出し防止
+        params.x = Math.max(0, Math.min(params.x, maxScreenWidth - params.width))
+        params.y = Math.max(0, Math.min(params.y, maxScreenHeight - params.height))
+        // 例: 中央に再配置
+        // params.x = (maxScreenWidth - params.width) / 2
+        // params.y = (maxScreenHeight - params.height) / 2
+
+        try {
+            windowManager.updateViewLayout(overlayView, params)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        Toast.makeText(this, "画面の向きが変更されました: 可動範囲を更新", Toast.LENGTH_SHORT).show()
     }
 
     override fun onDestroy() {
