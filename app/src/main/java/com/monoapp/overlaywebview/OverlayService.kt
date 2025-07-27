@@ -5,7 +5,11 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.PixelFormat
+import android.graphics.drawable.ShapeDrawable
+import android.graphics.drawable.shapes.PathShape
 import android.os.Build
 import android.os.IBinder
 import android.view.*
@@ -14,6 +18,9 @@ import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import android.util.DisplayMetrics
+import kotlin.io.path.Path
+import kotlin.io.path.moveTo
 
 class OverlayService : Service() {
     private lateinit var windowManager: WindowManager
@@ -22,40 +29,72 @@ class OverlayService : Service() {
     private lateinit var webView: WebView
     private lateinit var sharedPreferences: SharedPreferences
 
-    // Size settings (zoom level also linked)
-    private val sizeOptions = listOf(
-        Triple(600, 600, 0.7f),    // Small - 0.7x zoom
-        Triple(600, 900, 0.8f),   // Medium - 0.8x zoom
-        Triple(800, 1200, 0.9f),    // Large - 0.9x zoom
-        Triple(1000, 1400, 1.0f)    // XLarge
+    // ★★★ズームレベルのためのsizeOptionsを再定義★★★
+    // 今回はウィンドウの物理サイズではなく、ズームの選択肢として使用します
+    private val zoomOptions = listOf(
+        0.5f,  // 50%
+        0.7f,  // 70%
+        0.8f,  // 80%
+        0.9f,  // 90%
+        1.0f,  // 100% (デフォルト)
+        1.1f,  // 110%
+        1.2f,  // 120%
+        1.5f,  // 150%
+        2.0f   // 200%
     )
-    private var currentSizeIndex = 1 // Default is Medium (M)
-    private var isFocusEnabled = false // Track focus state
+    private var currentZoomIndex = 4 // 1.0f (100%) をデフォルトにする (zoomOptionsのインデックス)
+
+    private var isFocusEnabled = false
+
+    private var maxScreenWidth = 0
+    private var maxScreenHeight = 0
+
+    private var isResizing = false
+    private var initialWidth = 0
+    private var initialHeight = 0
+    private var initialX = 0 // ドラッグ移動のための初期座標 (params.x)
+    private var initialY = 0 // ドラッグ移動のための初期座標 (params.y)
+    private var initialTouchX = 0f
+    private var initialTouchY = 0f
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         sharedPreferences = getSharedPreferences("overlay_prefs", Context.MODE_PRIVATE)
 
-        // Retrieve saved size setting
-        currentSizeIndex = sharedPreferences.getInt("window_size_index", 1) // Default is Medium
+        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
-        // Retrieve saved URL, use default if none
+        val displayMetrics = DisplayMetrics()
+        windowManager.defaultDisplay.getMetrics(displayMetrics)
+
+        maxScreenWidth = displayMetrics.widthPixels
+        maxScreenHeight = displayMetrics.heightPixels
+
+        // ★★★保存されたズーム設定を読み込む★★★
+        currentZoomIndex = sharedPreferences.getInt("webview_zoom_index", currentZoomIndex)
+        // zoomOptionsの範囲外にならないように調整
+        if (currentZoomIndex < 0) currentZoomIndex = 0
+        if (currentZoomIndex >= zoomOptions.size) currentZoomIndex = zoomOptions.lastIndex
+
+
         val url = intent?.getStringExtra("url") ?: sharedPreferences.getString("last_url", "https://example.com") ?: "https://example.com"
 
         val inflater = getSystemService(LAYOUT_INFLATER_SERVICE) as LayoutInflater
         overlayView = inflater.inflate(R.layout.overlay_layout, null)
 
-        // WindowManager.LayoutParams setup
         val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
+        // 初期ウィンドウサイズを設定 (前回と同様、画面の60%程度)
+        val defaultWidth = (maxScreenWidth * 0.6f).toInt()
+        val defaultHeight = (maxScreenHeight * 0.6f).toInt()
+
         params = WindowManager.LayoutParams(
-            sizeOptions[currentSizeIndex].first,  // Width
-            sizeOptions[currentSizeIndex].second, // Height
+            defaultWidth,
+            defaultHeight,
             overlayType,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
@@ -66,8 +105,6 @@ class OverlayService : Service() {
         params.x = 50
         params.y = 100
 
-        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-
         try {
             windowManager.addView(overlayView, params)
         } catch (e: Exception) {
@@ -76,29 +113,25 @@ class OverlayService : Service() {
             return START_NOT_STICKY
         }
 
-        // WebView settings
         setupWebView(url)
 
-        // Setup drag functionality
         setupDragFunctionality()
+        setupResizeHandle()
 
-        // Setup size change buttons
-        setupSizeButtons()
+        // ★★★ズームボタンのセットアップを呼び出す★★★
+        setupZoomButtons()
 
-        // Setup URL change button
         setupUrlButton()
 
-        // ★ここから追加★
-        // Setup refresh button
         setupRefreshButton()
-        // ★ここまで追加★
 
-        // Setup focus button
+        // ★★★ 戻るボタンのセットアップを追加 ★★★
+        setupBackButton()
+
         setupFocusButton()
 
-        // Setup close button
         setupCloseButton()
-
+        setupResizeHandleStyle()
         return START_STICKY
     }
 
@@ -115,42 +148,25 @@ class OverlayService : Service() {
         }
         webView.webViewClient = WebViewClient()
 
-        // Initial zoom setting (linked to size)
-        applyZoom()
+        // ★★★ズームレベルを適用★★★
+        applyZoom(zoomOptions[currentZoomIndex])
         webView.loadUrl(url)
     }
 
-    private fun applyZoom() {
-        val zoomLevel = sizeOptions[currentSizeIndex].third
+    // applyZoom メソッドの引数はズームレベルを直接受け取る
+    private fun applyZoom(zoomLevel: Float) {
         webView.setInitialScale((zoomLevel * 100).toInt())
         webView.settings.textZoom = (zoomLevel * 100).toInt()
+        // ズームレベルを保存
+        sharedPreferences.edit().putInt("webview_zoom_index", currentZoomIndex).apply()
     }
 
     private fun setupDragFunctionality() {
         val dragBar = overlayView.findViewById<View>(R.id.dragBar)
-        val sizeDecreaseButton = overlayView.findViewById<View>(R.id.sizeDecreaseButton)
-        val sizeIncreaseButton = overlayView.findViewById<View>(R.id.sizeIncreaseButton)
-        val urlButton = overlayView.findViewById<View>(R.id.urlButton)
-        // ★ここから追加★
-        val refreshButton = overlayView.findViewById<View>(R.id.refreshButton)
-        // ★ここまで追加★
-        val focusButton = overlayView.findViewById<View>(R.id.focusButton)
-        val closeButton = overlayView.findViewById<View>(R.id.closeButton)
-        var initialX = 0
-        var initialY = 0
-        var initialTouchX = 0f
-        var initialTouchY = 0f
 
         dragBar.setOnTouchListener { v, event ->
-            // Exclude button areas from drag
-            if (isTouchOnButton(event, sizeDecreaseButton) ||
-                isTouchOnButton(event, sizeIncreaseButton) ||
-                isTouchOnButton(event, urlButton) ||
-                isTouchOnButton(event, focusButton) ||
-                isTouchOnButton(event, closeButton) ||
-                // ★ここから追加★
-                isTouchOnButton(event, refreshButton)) {
-                // ★ここまで追加★
+            // ボタン領域にタッチしている場合はドラッグを無効化
+            if (isTouchOnAnyButton(event)) {
                 return@setOnTouchListener false
             }
 
@@ -166,6 +182,10 @@ class OverlayService : Service() {
                     params.x = initialX + (event.rawX - initialTouchX).toInt()
                     params.y = initialY + (event.rawY - initialTouchY).toInt()
 
+                    // 画面の端からはみ出さないように位置を調整
+                    params.x = Math.max(0, Math.min(params.x, maxScreenWidth - params.width))
+                    params.y = Math.max(0, Math.min(params.y, maxScreenHeight - params.height))
+
                     try {
                         windowManager.updateViewLayout(overlayView, params)
                     } catch (e: Exception) {
@@ -180,50 +200,116 @@ class OverlayService : Service() {
                 else -> false
             }
         }
-
-        // Make it clickable
         dragBar.isClickable = true
     }
 
-    private fun isTouchOnButton(event: MotionEvent, button: View): Boolean {
-        val buttonLocation = IntArray(2)
-        button.getLocationInWindow(buttonLocation)
-        val buttonLeft = buttonLocation[0]
-        val buttonRight = buttonLeft + button.width
-        val buttonTop = buttonLocation[1]
-        val buttonBottom = buttonTop + button.height
+    private fun setupResizeHandle() {
+        val resizeHandle = overlayView.findViewById<View>(R.id.resizeHandle)
 
-        return event.rawX >= buttonLeft && event.rawX <= buttonRight &&
-                event.rawY >= buttonTop && event.rawY <= buttonBottom
+        resizeHandle.setOnTouchListener { v, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    isResizing = true
+                    initialWidth = params.width
+                    initialHeight = params.height
+                    initialTouchX = event.rawX
+                    initialTouchY = event.rawY
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (isResizing) {
+                        val dx = (event.rawX - initialTouchX).toInt()
+                        val dy = (event.rawY - initialTouchY).toInt()
+
+                        val newWidth = initialWidth + dx
+                        val newHeight = initialHeight + dy
+
+                        // 最小サイズを設定（例: 画面の20%）
+                        val minWidth = (maxScreenWidth * 0.2f).toInt()
+                        val minHeight = (maxScreenHeight * 0.2f).toInt()
+
+                        // 最大サイズと最小サイズでクリップ (画面の90%を維持)
+                        params.width = Math.max(minWidth, Math.min(newWidth, (maxScreenWidth * 0.90f).toInt()))
+                        params.height = Math.max(minHeight, Math.min(newHeight, (maxScreenHeight * 0.90f).toInt()))
+
+                        try {
+                            windowManager.updateViewLayout(overlayView, params)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                        true
+                    } else {
+                        false
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    isResizing = false
+                    v.performClick()
+                    false
+                }
+                else -> false
+            }
+        }
     }
 
-    private fun setupSizeButtons() {
-        val sizeDecreaseButton = overlayView.findViewById<TextView>(R.id.sizeDecreaseButton)
-        val sizeIncreaseButton = overlayView.findViewById<TextView>(R.id.sizeIncreaseButton)
 
-        // Initial button state
-        updateSizeButtonStates(sizeDecreaseButton, sizeIncreaseButton)
+    private fun isTouchInViewBounds(touchX: Float, touchY: Float, view: View): Boolean {
+        val viewLocation = IntArray(2)
+        view.getLocationOnScreen(viewLocation)
+        val viewLeft = viewLocation[0]
+        val viewTop = viewLocation[1]
+        val viewRight = viewLeft + view.width
+        val viewBottom = viewTop + view.height
 
-        sizeDecreaseButton.setOnClickListener {
-            if (currentSizeIndex > 0) {
-                currentSizeIndex--
-                updateWindowSize()
-                updateSizeButtonStates(sizeDecreaseButton, sizeIncreaseButton)
+        return touchX >= viewLeft && touchX <= viewRight &&
+                touchY >= viewTop && touchY <= viewBottom
+    }
+
+    private fun isTouchOnAnyButton(event: MotionEvent): Boolean {
+        val sizeDecreaseButton = overlayView.findViewById<View>(R.id.sizeDecreaseButton) // 復活
+        val sizeIncreaseButton = overlayView.findViewById<View>(R.id.sizeIncreaseButton) // 復活
+        val urlButton = overlayView.findViewById<View>(R.id.urlButton)
+        val refreshButton = overlayView.findViewById<View>(R.id.refreshButton)
+        val backButton = overlayView.findViewById<View>(R.id.backButton) // ★★★ 追加 ★★★
+        val focusButton = overlayView.findViewById<View>(R.id.focusButton)
+        val closeButton = overlayView.findViewById<View>(R.id.closeButton)
+
+        return isTouchInViewBounds(event.rawX, event.rawY, sizeDecreaseButton) ||
+                isTouchInViewBounds(event.rawX, event.rawY, sizeIncreaseButton) ||
+                isTouchInViewBounds(event.rawX, event.rawY, urlButton) ||
+                isTouchInViewBounds(event.rawX, event.rawY, refreshButton) ||
+                isTouchInViewBounds(event.rawX, event.rawY, backButton) || // ★★★ 追加 ★★★
+                isTouchInViewBounds(event.rawX, event.rawY, focusButton) ||
+                isTouchInViewBounds(event.rawX, event.rawY, closeButton)
+    }
+
+    // ★★★ズームボタンのセットアップ (名称変更 & ロジック修正)★★★
+    private fun setupZoomButtons() {
+        val zoomDecreaseButton = overlayView.findViewById<TextView>(R.id.sizeDecreaseButton)
+        val zoomIncreaseButton = overlayView.findViewById<TextView>(R.id.sizeIncreaseButton)
+
+        updateZoomButtonStates(zoomDecreaseButton, zoomIncreaseButton)
+
+        zoomDecreaseButton.setOnClickListener {
+            if (currentZoomIndex > 0) {
+                currentZoomIndex--
+                applyZoom(zoomOptions[currentZoomIndex])
+                updateZoomButtonStates(zoomDecreaseButton, zoomIncreaseButton)
             }
         }
 
-        sizeIncreaseButton.setOnClickListener {
-            if (currentSizeIndex < sizeOptions.size - 1) {
-                currentSizeIndex++
-                updateWindowSize()
-                updateSizeButtonStates(sizeDecreaseButton, sizeIncreaseButton)
+        zoomIncreaseButton.setOnClickListener {
+            if (currentZoomIndex < zoomOptions.size - 1) {
+                currentZoomIndex++
+                applyZoom(zoomOptions[currentZoomIndex])
+                updateZoomButtonStates(zoomDecreaseButton, zoomIncreaseButton)
             }
         }
     }
 
-    private fun updateSizeButtonStates(decreaseButton: TextView, increaseButton: TextView) {
-        // Update decrease button state
-        if (currentSizeIndex <= 0) {
+    // ★★★ズームボタンの状態更新 (名称変更 & ロジック修正)★★★
+    private fun updateZoomButtonStates(decreaseButton: TextView, increaseButton: TextView) {
+        if (currentZoomIndex <= 0) {
             decreaseButton.isEnabled = false
             decreaseButton.setBackgroundColor(0xFF9E9E9E.toInt()) // Grey for disabled
             decreaseButton.alpha = 0.5f
@@ -233,8 +319,7 @@ class OverlayService : Service() {
             decreaseButton.alpha = 1.0f
         }
 
-        // Update increase button state
-        if (currentSizeIndex >= sizeOptions.size - 1) {
+        if (currentZoomIndex >= zoomOptions.size - 1) {
             increaseButton.isEnabled = false
             increaseButton.setBackgroundColor(0xFF9E9E9E.toInt()) // Grey for disabled
             increaseButton.alpha = 0.5f
@@ -245,22 +330,13 @@ class OverlayService : Service() {
         }
     }
 
+    // updateWindowSizeはズームボタンではなく、ウィンドウの物理サイズ変更に使われるが、
+    // 今回は右下スワイプが担当するため、このメソッドは直接は呼ばれません。
+    // 将来的な拡張のために残すか、完全に削除するかは判断次第ですが、現時点では直接の呼び出しはないでしょう。
     private fun updateWindowSize() {
-        // Update window size
-        params.width = sizeOptions[currentSizeIndex].first
-        params.height = sizeOptions[currentSizeIndex].second
-
-        // Change zoom linked to size
-        applyZoom()
-
-        // Save size setting
-        sharedPreferences.edit().putInt("window_size_index", currentSizeIndex).apply()
-
-        try {
-            windowManager.updateViewLayout(overlayView, params)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        // このメソッドは、ウィンドウの物理サイズを特定のプリセットに戻す必要がある場合に利用できます。
+        // 現在の右下スワイプによるリサイズ機能とは独立しています。
+        // applyZoom()はズームボタンで制御されるため、ここからは呼び出しません。
     }
 
     private fun setupUrlButton() {
@@ -321,16 +397,46 @@ class OverlayService : Service() {
 
         dialog.show()
     }
+    private fun setupResizeHandleStyle() {
+        val resizeHandle = overlayView.findViewById<View>(R.id.resizeHandle)
+        val size = 32f // サイズはXMLと合わせる
 
-    // ★ここから追加★
+        val path = android.graphics.Path()
+        path.moveTo(0f, size) // 左下
+        path.lineTo(size, size) // 右下
+        path.lineTo(size, 0f) // 右上
+        path.close()
+
+        val paint = Paint()
+        paint.color = Color.parseColor("#DDDDDD") // 明るいグレー
+        paint.style = Paint.Style.FILL
+
+        val shape = PathShape(path, size, size)
+        val drawable = ShapeDrawable(shape)
+        drawable.paint.set(paint)
+
+        resizeHandle?.background = drawable
+    }
     private fun setupRefreshButton() {
         val refreshButton = overlayView.findViewById<View>(R.id.refreshButton)
         refreshButton.setOnClickListener {
-            webView.reload() // WebViewをリロードする
+            webView.reload()
             Toast.makeText(this, "ページを更新しました", Toast.LENGTH_SHORT).show()
         }
     }
-    // ★ここまで追加★
+
+    // ★★★ 戻るボタンのセットアップメソッドを追加 ★★★
+    private fun setupBackButton() {
+        val backButton = overlayView.findViewById<View>(R.id.backButton)
+        backButton.setOnClickListener {
+            if (webView.canGoBack()) {
+                webView.goBack()
+                Toast.makeText(this, "前のページに戻りました", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "これ以上戻るページはありません", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     private fun setupFocusButton() {
         val focusButton = overlayView.findViewById<TextView>(R.id.focusButton)
@@ -343,8 +449,8 @@ class OverlayService : Service() {
     }
 
     private fun updateFocusButtonText(button: TextView) {
-        button.text = if (isFocusEnabled)  "🚫" else "⌨"
-        button.setBackgroundColor(if (isFocusEnabled)  0xFF9E9E9E.toInt() else 0xFF673AB7.toInt())
+        button.text = if (isFocusEnabled) "🚫" else "⌨"
+        button.setBackgroundColor(if (isFocusEnabled) 0xFF9E9E9E.toInt() else 0xFF673AB7.toInt())
     }
 
     private fun toggleFocus() {

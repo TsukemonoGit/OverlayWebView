@@ -1,118 +1,139 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:background="@drawable/overlay_background"
     android:elevation="8dp">
 
     <LinearLayout
-        android:id="@+id/dragBar"
         android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:background="#FF2196F3"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:clickable="true"
-        android:focusable="true"
-        android:paddingLeft="12dp"
-        android:paddingRight="8dp">
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/focusButton"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginRight="4dp"
-            android:background="#673AB7"
-            android:text="⌨"
-            android:textColor="#FFFFFF"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:gravity="center"
+        <LinearLayout
+            android:id="@+id/dragBar"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:background="#FF2196F3"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
             android:clickable="true"
-            android:focusable="true" />
+            android:focusable="true"
+            android:paddingLeft="12dp"
+            android:paddingRight="8dp">
 
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1" />
-        <TextView
-            android:id="@+id/sizeDecreaseButton"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginRight="2dp"
-            android:background="#4CAF50"
-            android:text="-"
-            android:textColor="#FFFFFF"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:gravity="center"
-            android:clickable="true"
-            android:focusable="true" />
+            <TextView
+                android:id="@+id/focusButton"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginRight="4dp"
+                android:background="#7C4DFF" android:text="⌨"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:clickable="true"
+                android:focusable="true" />
 
-        <TextView
-            android:id="@+id/sizeIncreaseButton"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginRight="4dp"
-            android:background="#4CAF50"
-            android:text="+"
-            android:textColor="#FFFFFF"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:gravity="center"
-            android:clickable="true"
-            android:focusable="true" />
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
 
-        <TextView
-            android:id="@+id/urlButton"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginRight="4dp"
-            android:background="#ffffff"
-            android:text="🌐"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:gravity="center"
-            android:clickable="true"
-            android:focusable="true" />
+            <TextView
+                android:id="@+id/backButton"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginRight="4dp"
+                android:background="#42A5F5" android:text="←"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:clickable="true"
+                android:focusable="true" />
 
-        <TextView
-            android:id="@+id/refreshButton"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginRight="4dp"
-            android:background="#2196F3"
-            android:text="↻"
-            android:textColor="#FFFFFF"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:gravity="center"
-            android:clickable="true"
-            android:focusable="true" />
+            <TextView
+                android:id="@+id/refreshButton"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginRight="8dp"
+                android:background="#42A5F5" android:text="↻"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:clickable="true"
+                android:focusable="true" />
 
-        <TextView
-            android:id="@+id/closeButton"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:background="#F44336"
-            android:text="×"
-            android:textColor="#FFFFFF"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:gravity="center"
-            android:clickable="true"
-            android:focusable="true" />
+            <TextView
+                android:id="@+id/sizeDecreaseButton"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginRight="2dp"
+                android:background="#90A4AE" android:text="-"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/sizeIncreaseButton"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginRight="4dp"
+                android:background="#90A4AE" android:text="+"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/urlButton"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginRight="8dp"
+                android:background="#F0F0F0" android:text="🌐"
+                android:textColor="#333333" android:textSize="12sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/closeButton"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="#EF5350" android:text="×"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:clickable="true"
+                android:focusable="true" />
+
+        </LinearLayout>
+
+        <WebView
+            android:id="@+id/webview"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:overScrollMode="never"
+            android:background="#FFFFFF" />
 
     </LinearLayout>
 
-    <WebView
-        android:id="@+id/webview"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:overScrollMode="never"
-        android:background="#FFFFFF" />
+    <View
+        android:id="@+id/resizeHandle"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_gravity="bottom|right"
+        android:background="#99000000" android:clickable="true"
+        android:focusable="true" />
 
-</LinearLayout>
+</FrameLayout>
